@@ -2,6 +2,8 @@ package com.ogonzalezm.testgepsi.di
 
 import com.ogonzalezm.testgepsi.domain.repository.item.ItemRepository
 import com.ogonzalezm.testgepsi.domain.repository.item.ItemRepositoryImpl
+import com.ogonzalezm.testgepsi.domain.repository.search.SearchRepository
+import com.ogonzalezm.testgepsi.domain.repository.search.SearchRepositoryImpl
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -17,5 +19,11 @@ interface RepositoryModule {
     fun provideBookRepository(
         itemRepositoryImpl: ItemRepositoryImpl
     ): ItemRepository
+
+    @Binds
+    @Singleton
+    fun provideSearchRepository(
+        searchRepositoryImpl: SearchRepositoryImpl
+    ): SearchRepository
 
 }

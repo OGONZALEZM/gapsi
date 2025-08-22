@@ -1,21 +1,29 @@
 package com.ogonzalezm.testgepsi.ui.home
 
 import android.annotation.SuppressLint
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -26,12 +34,18 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -41,6 +55,7 @@ import androidx.paging.compose.collectAsLazyPagingItems
 import coil3.compose.AsyncImage
 import com.ogonzalezm.test_gepsi.R
 import com.ogonzalezm.testgepsi.domain.model.Item
+import timber.log.Timber
 
 @OptIn(ExperimentalMaterial3Api::class)
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
@@ -51,7 +66,10 @@ fun HomeScreen(
 
     val state by viewModel.state.collectAsState()
     val paging = viewModel.items.collectAsLazyPagingItems()
+    val suggestions by viewModel.recentSearches.collectAsState()
     val onIntent = viewModel::handleIntent
+
+    val focusManager = LocalFocusManager.current
 
     Scaffold(
         topBar = {
@@ -66,39 +84,20 @@ fun HomeScreen(
             Column(
                 modifier = Modifier.fillMaxSize()
                     .padding(innerPadding)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth()
-                        .padding(20.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(end = 10.dp),
-                        value = state.keyword,
-                        shape = RoundedCornerShape(16.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outline
-                        ),
-                        singleLine = true,
-                        onValueChange = {
-                        onIntent(HomeIntent.EnterKeyword(it))
-                    })
-                    IconButton(onClick = { onIntent(HomeIntent.Search) }) {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = stringResource(R.string.search)
-                        )
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() }
+                    ) {
+                        focusManager.clearFocus()
                     }
-                }
-                if(state.errorMessage.isNotBlank()) {
-                    Text(modifier = Modifier.fillMaxWidth()
-                        .padding(20.dp),
-                        text = state.errorMessage,
-                        color = MaterialTheme.colorScheme.error)
-                }
+            ) {
+
+                SearchBar(state, suggestions, onIntent)
+
+                val isRefreshing = paging.loadState.refresh is LoadState.Loading
+                val hasData = paging.itemCount > 0
+
+
 
                 LazyColumn {
                     items(
@@ -123,6 +122,103 @@ fun HomeScreen(
         }
     )
 
+}
+
+@Composable
+fun SearchBar(
+    state: HomeState,
+    suggestions: List<String>,
+    onIntent: (HomeIntent) -> Unit
+) {
+    var expanded by remember { mutableStateOf(true) }
+    var hasFocus by remember { mutableStateOf(false) }
+
+    Row(
+        modifier = Modifier.fillMaxWidth()
+            .padding(horizontal = 20.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        OutlinedTextField(
+            modifier = Modifier
+                .weight(1f)
+                .padding(end = 10.dp)
+                .onFocusChanged { focusState ->
+                    Timber.e("Focus: ${focusState.isFocused}")
+                    hasFocus = focusState.isFocused
+                },
+            value = state.keyword,
+            shape = RoundedCornerShape(16.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                unfocusedBorderColor = MaterialTheme.colorScheme.outline
+            ),
+            singleLine = true,
+            onValueChange = {
+                onIntent(HomeIntent.EnterKeyword(it))
+            })
+        IconButton(onClick = { onIntent(HomeIntent.Search) }) {
+            Icon(
+                imageVector = Icons.Default.Search,
+                contentDescription = stringResource(R.string.search)
+            )
+        }
+    }
+
+    AnimatedVisibility(visible = expanded ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp)
+                        .heightIn(max = 240.dp)
+                ) {
+                    items(suggestions, key = { it }) {
+                        Text(
+                            modifier = Modifier
+                                .padding(horizontal = 12.dp, vertical = 10.dp)
+                                .clickable {
+                                    onIntent(HomeIntent.SearchByKeyword(it))
+                                    expanded = false
+                                 },
+                            text = it,
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                        HorizontalDivider(modifier = Modifier.fillMaxWidth())
+                    }
+                }
+                HorizontalDivider(modifier = Modifier.fillMaxWidth())
+                Button(
+                    modifier = Modifier.fillMaxWidth()
+                        .height(40.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Transparent
+                    ),
+                    onClick = { onIntent(HomeIntent.Clear) }) {
+                    Text(stringResource(R.string.clear),
+                        color = MaterialTheme.colorScheme.primary)
+                }
+            }
+        }
+    }
+    LaunchedEffect(state.keyword, hasFocus) {
+        expanded = if (state.keyword.isNotBlank() && hasFocus) {
+            suggestions.isNotEmpty()
+        } else {
+            false
+        }
+    }
+    if(state.errorMessage.isNotBlank()) {
+        Text(modifier = Modifier.fillMaxWidth()
+            .padding(20.dp),
+            text = state.errorMessage,
+            color = MaterialTheme.colorScheme.error)
+    }
 }
 
 @Composable
